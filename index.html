@@ -2,7 +2,7 @@
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>浜田山町会 QRスキャナー</title><style>
 :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f3f5f8;color:#102441;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif}.wrap{max-width:660px;margin:0 auto;padding:20px 15px 45px}header{background:#102441;color:#fff;border-radius:18px;padding:22px}header small{color:#e6bc49;font-weight:800;letter-spacing:.1em}h1{font-size:23px;margin:7px 0 0}.card{background:white;border:1px solid #dae0e8;border-radius:16px;padding:18px;margin-top:14px}h2{font-size:18px;margin:0 0 12px}.btn{width:100%;border:0;border-radius:11px;padding:16px;margin:6px 0;font-size:17px;font-weight:800;cursor:pointer;background:#102441;color:#fff}.btn.alt{background:#eaf1f9;color:#102441}.btn.stop{background:#a72d43}.btn:disabled{opacity:.5}.muted{color:#617085;font-size:13px;line-height:1.65}.camera{position:relative;background:#101923;border-radius:12px;overflow:hidden;min-height:180px;display:none}.camera video{display:block;width:100%;max-height:430px;object-fit:cover}.camera:after{content:"";position:absolute;left:18%;right:18%;top:18%;bottom:18%;border:3px solid #e6bc49;border-radius:14px;pointer-events:none}#status{font-size:14px;line-height:1.7;white-space:pre-wrap}#result{word-break:break-all;font-weight:700;background:#f2f5fa;padding:12px;border-radius:10px;min-height:48px}input[type=file]{display:none}canvas{display:none}.warn{color:#a52b3c} .success{color:#176d43}</style></head>
 <body><div class="wrap"><header><small>HAMADAYAMA TOWN ASSOCIATION</small><h1>浜田山町会 QRスキャナー</h1></header>
-<section class="card"><h2>📷 QR連続読み取り Ver1.1</h2><p class="muted">Safariで開いてカメラの使用を許可してください。QRを大きめに映し、1～2秒静止してください。読み取った文字列のみをこの端末に表示します。</p><div class="camera" id="camera"><video id="video" autoplay muted playsinline></video></div><button class="btn" id="start">📷 カメラを起動</button><button class="btn stop" id="stop" hidden>■ カメラを停止</button><button class="btn alt" id="photo">📸 写真を撮影・選択して読み取る</button><input type="file" id="file" accept="image/*" capture="environment"><p id="status" aria-live="polite">待機中</p></section>
+<section class="card"><h2>📷 QR連続読み取り Ver1.2</h2><p class="muted">Safariで開いてカメラの使用を許可してください。QR全体が枠に収まるように少し離して、ピントが合った状態で2秒静止してください。読み取った文字列のみをこの端末に表示します。</p><div class="camera" id="camera"><video id="video" autoplay muted playsinline></video></div><button class="btn" id="start">📷 カメラを起動</button><button class="btn stop" id="stop" hidden>■ カメラを停止</button><button class="btn alt" id="photo">📸 写真を撮影・選択して読み取る</button><input type="file" id="file" accept="image/*" capture="environment"><p id="status" aria-live="polite">待機中</p></section>
 <section class="card"><h2>読み取り結果（動作確認用）</h2><div id="result">まだ読み取っていません</div><button class="btn alt" id="copy" disabled>結果をコピー</button><p class="muted">これはカメラの動作確認版です。会員情報の検索、イベント受付・引換登録、災害時の個人情報表示はまだ行いません。読み取った内容を外部へ送信・保存しません。</p></section>
 <canvas id="canvas"></canvas></div>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
@@ -17,29 +17,29 @@ async function inspectFrame(){
  if(busy||!scanning||video.readyState<2||!video.videoWidth)return;
  busy=true;
  try{
-  // iOS Safari: first try the native QR detector where supported.
   if(nativeDetector){
    try{const codes=await nativeDetector.detect(video);if(codes.length&&codes[0].rawValue){detected(codes[0].rawValue);return;}}catch(e){nativeDetector=null;}
   }
-  // Scan at 2 resolutions: the higher resolution helps with small QR codes.
-  for(const maxSize of [1280,720]){
-   const scale=Math.min(1,maxSize/Math.max(video.videoWidth,video.videoHeight));
-   canvas.width=Math.max(1,Math.round(video.videoWidth*scale));
-   canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
-   ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  // Decode the center region first. Lower resolution prevents Safari UI freezes.
+  const vw=video.videoWidth,vh=video.videoHeight;
+  const regions=[{x:vw*.13,y:vh*.13,w:vw*.74,h:vh*.74,max:720},{x:0,y:0,w:vw,h:vh,max:640}];
+  for(const r of regions){
+   const scale=Math.min(1,r.max/Math.max(r.w,r.h));
+   canvas.width=Math.max(1,Math.round(r.w*scale));canvas.height=Math.max(1,Math.round(r.h*scale));
+   ctx.drawImage(video,r.x,r.y,r.w,r.h,0,0,canvas.width,canvas.height);
    if(decode())return;
   }
   frames++;
-  if(frames%12===0)say('カメラ解析中（'+video.videoWidth+'×'+video.videoHeight+'）。QRを枠いっぱいに映し、明るい場所で1～2秒静止してください。');
- }finally{busy=false;}
+  if(frames%10===0)say('自動解析中（'+frames+'回）。QR全体を枠の中央に入れ、画面から少し離してピントを合わせてください。');
+ }catch(e){say('解析エラー: '+e.message,'warn');}finally{busy=false;}
 }
 function frame(t){
  if(!scanning)return;
- if(t-lastFrame>=220){lastFrame=t;inspectFrame();}
+ if(t-lastFrame>=350){lastFrame=t;inspectFrame();}
  raf=requestAnimationFrame(frame);
 }
 function halt(){scanning=false;busy=false;cancelAnimationFrame(raf);if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}video.srcObject=null;box.style.display='none';start.hidden=false;stop.hidden=true;}
-start.addEventListener('click',async()=>{if(!navigator.mediaDevices?.getUserMedia){say('このブラウザではカメラを利用できません。SafariのHTTPSページで開くか写真読取をご利用ください。','warn');return;}if(!window.jsQR){say('QR解析ライブラリを読み込めません。通信状態を確認してください。','warn');return;}try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});video.srcObject=stream;await video.play();box.style.display='block';start.hidden=true;stop.hidden=false;scanning=true;frames=0;lastFrame=0;nativeDetector=null;if('BarcodeDetector' in window){try{nativeDetector=new BarcodeDetector({formats:['qr_code']});}catch(e){}}say('カメラ起動中。QRを枠内に映してください。');raf=requestAnimationFrame(frame);}catch(e){halt();say('カメラを起動できません（'+e.name+'）。Safariのサイト設定でカメラを「許可」にするか、写真読取をご利用ください。','warn');}});
+start.addEventListener('click',async()=>{if(!navigator.mediaDevices?.getUserMedia){say('このブラウザではカメラを利用できません。SafariのHTTPSページで開くか写真読取をご利用ください。','warn');return;}if(!window.jsQR){say('QR解析ライブラリを読み込めません。通信状態を確認してください。','warn');return;}try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},focusMode:{ideal:"continuous"}}});video.srcObject=stream;await video.play();box.style.display='block';start.hidden=true;stop.hidden=false;scanning=true;frames=0;lastFrame=0;nativeDetector=null;if('BarcodeDetector' in window){try{nativeDetector=new BarcodeDetector({formats:['qr_code']});}catch(e){}}say('カメラ起動中。QRを枠内に映してください。');raf=requestAnimationFrame(frame);}catch(e){halt();say('カメラを起動できません（'+e.name+'）。Safariのサイト設定でカメラを「許可」にするか、写真読取をご利用ください。','warn');}});
 stop.addEventListener('click',()=>{halt();say('カメラを停止しました。');});
 document.getElementById('photo').addEventListener('click',()=>file.click());
 file.addEventListener('change',async()=>{const f=file.files?.[0];if(!f)return;try{const bitmap=await createImageBitmap(f);const scale=Math.min(1,1600/Math.max(bitmap.width,bitmap.height));canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();if(!decode())say('写真からQRを検出できませんでした。QRを大きく写して再度お試しください。','warn');}catch(e){say('画像を開けません: '+e.message,'warn');}file.value='';});
